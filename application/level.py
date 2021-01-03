@@ -1,45 +1,64 @@
-from random import randint
-from enum import Enum
-
-
-class PointState(Enum):
-    Player = 0,
-    Obstacle = 1,
-    Terrain = 2,
-    Bullet = 3,
-    Empty = 4,
-    Enemy = 5,
-    Flag = 6
+from application.cell_state import CellState
+import random
 
 
 class Level:
-    def __init__(self, size):
+    def __init__(self, size, seed):
         self.size = size
-        self.level = list()
-        for _ in range(size):
-            line = [PointState.Empty] * size
-            self.level.append(line)
+        random.seed(seed)
 
-    def with_obstacles(self, count):
-        return self._with(count, PointState.Obstacle)
+        self.level = [
+            [CellState.Empty] * size
+            for _ in range(size)
+        ]
 
-    def with_player(self):
-        return self._with(1, PointState.Player)
+        self._free_cells = [
+            (x, y)
+            for x in range(self.size)
+            for y in range(self.size)
+            if (x, y) != (size - 3, size // 2)
+            if (x, y) != (size - 1, size // 2)
+            if (x, y) != (size - 2, size // 2)
+            if (x, y) != (size - 2, size // 2 - 1)
+            if (x, y) != (size - 2, size // 2 + 1)
+            if (x, y) != (size - 1, size // 2 + 1)
+            if (x, y) != (size - 1, size // 2 - 1)
+        ]
 
-    def with_enemies(self, count):
-        return self._with(count, PointState.Enemy)
+        self.level[size - 3][size // 2] = CellState.Player
+        self.level[size - 1][size // 2] = CellState.PlayerFlag
+        self.level[size - 2][size // 2] = CellState.BrickWall
+        self.level[size - 2][size // 2 - 1] = CellState.BrickWall
+        self.level[size - 2][size // 2 + 1] = CellState.BrickWall
+        self.level[size - 1][size // 2 + 1] = CellState.BrickWall
+        self.level[size - 1][size // 2 - 1] = CellState.BrickWall
+
+    def with_brick_walls(self, count):
+        return self._with(count, CellState.BrickWall)
+
+    def with_concrete_walls(self, count):
+        return self._with(count, CellState.ConcreteWall)
+
+    def with_patrolling_enemies(self, count):
+        return self._with(count, CellState.PatrollingEnemy)
+
+    def with_haunting_enemies(self, count):
+        return self._with(count, CellState.HauntingEnemy)
 
     def with_terrains(self, count):
-        return self._with(count, PointState.Terrain)
-
-    def with_flag(self):
-        return self
+        return self._with(count, CellState.Terrain)
 
     def _with(self, count, game_obj):
         for _ in range(count):
-            x = randint(0, self.size - 1)
-            y = randint(0, self.size - 1)
-            self.level[x][y] = game_obj
+            free_count = len(self._free_cells)
+            if game_obj in [CellState.HauntingEnemy,
+                            CellState.PatrollingEnemy]:
+                point = random.choice(
+                    self._free_cells[:free_count // 4])
+            else:
+                point = random.choice(self._free_cells)
+            self.level[point[0]][point[1]] = game_obj
+            self._free_cells.remove(point)
         return self
 
     def __iter__(self):

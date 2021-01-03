@@ -1,6 +1,13 @@
 from enum import Enum
 
 
+class Direction(Enum):
+    Up = 1
+    Down = 2
+    Left = 3
+    Right = 4
+
+
 class Point:
     def __init__(self, x: int, y: int):
         self.x = x
@@ -14,9 +21,10 @@ class Point:
             raise TypeError
         return self.x == other.x and self.y == other.y
 
-
-class Direction(Enum):
-    Up = 1,
-    Down = 2,
-    Left = 3,
-    Right = 4
+    def neighbors(self):
+        return [
+            (Point(self.x, self.y - 1), Direction.Up),
+            (Point(self.x, self.y + 1), Direction.Down),
+            (Point(self.x - 1, self.y), Direction.Left),
+            (Point(self.x + 1, self.y), Direction.Right)
+        ]

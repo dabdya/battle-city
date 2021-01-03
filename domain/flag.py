@@ -1,3 +1,4 @@
 class Flag:
-    def __init__(self, stability=1):
-        self.stability = stability
+    def __init__(self, location, health=1):
+        self.location = location
+        self.health = health

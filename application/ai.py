@@ -58,12 +58,6 @@ class EnemyAI:
                 continue
             if Wall in self.game.map.cell_types(location):
                 continue
-                # wall = self.game.get_obj_by_location_and_type(location, Wall)
-                # bullet_type = enemy.get_bullet_type()
-                # if not wall.destruct(bullet_type):
-                #     continue
-                # else:
-                #     pass
 
             directions.append(direction)
             res = self.dfs(enemy, location, directions, visited)
@@ -75,11 +69,11 @@ class EnemyAI:
 
     def _shoot_if_detect(self, enemy):
         enemy.shoot_count += 1
-        if enemy.shoot_count < 5:
+        if enemy.shoot_count < 3:
             bullet = enemy.shoot()
             if bullet:
                 self.game.map[bullet.location].add(bullet)
-                enemy.velocity = Point(0, 0)
+                # enemy.velocity = Point(0, 0)
             return True
 
     def _next_direction(self, enemy):
@@ -139,7 +133,7 @@ class EnemyAI:
                 bullet = enemy.shoot()
                 if bullet:
                     self.game.map[bullet.location].add(bullet)
-                    enemy.velocity = Point(0, 0)
+                    # enemy.velocity = Point(0, 0)
                 return
 
         new_location = enemy.get_new_location(enemy.direction)

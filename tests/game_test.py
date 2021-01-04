@@ -1,6 +1,7 @@
 import unittest
 from application.game import Game
-from application.cell_state import CellState as cs
+from application.level_generator import Level
+from application.level_generator import CellState as cs
 from domain.infrastructure.geometry import Point, Direction
 
 
@@ -58,3 +59,31 @@ class GameTests(unittest.TestCase):
         self.assertEqual(Point(1, 0), self.game.player.location)
         self.assertTrue(len(self.game.map[Point(1, 0)]) == 2)
         self.assertTrue(len(self.game.map[Point(1, 1)]) == 0)
+
+    def test_enemy_not_spawn_if_maximum_reached(self):
+        self.game = Game()
+        level = Level(self.game.size, 10) \
+            .with_brick_walls(self.game.size * 2) \
+            .with_concrete_walls(self.game.size) \
+            .with_terrains(self.game.size // 2) \
+            .with_patrolling_enemies(1) \
+            .with_haunting_enemies(2)
+        self.game = self.game.start(level)
+
+        self.assertEqual(len(self.game.map.get_enemies()), 3)
+        self.game.spawn_enemy()
+        self.assertEqual(len(self.game.map.get_enemies()), 3)
+
+    def test_enemy_spawn_if_possible(self):
+        self.game = Game()
+        level = Level(self.game.size, 10) \
+            .with_brick_walls(self.game.size * 2) \
+            .with_concrete_walls(self.game.size) \
+            .with_terrains(self.game.size // 2) \
+            .with_patrolling_enemies(1) \
+            .with_haunting_enemies(1)
+        self.game = self.game.start(level)
+
+        self.assertEqual(len(self.game.map.get_enemies()), 2)
+        self.game.spawn_enemy()
+        self.assertEqual(len(self.game.map.get_enemies()), 3)

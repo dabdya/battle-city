@@ -9,12 +9,12 @@ try:
     from domain.infrastructure.geometry import Direction, Point
     from domain.infrastructure.move_obj import IMoveObject
     from application.game import Game, GameStatus
-    from application.level import Level
+    from application.level_generator import Level
     from domain.obstacle import Wall, WallType
     from domain.bullet import BulletType
     from domain.terrain import Grass
     from domain.flag import Flag
-    from domain.boom import Boom
+    from domain.boom import Boom, BoomType
     from domain.enemy import EnemyType
 except ModuleNotFoundError as err:
     sys.stdout.write(str(err))
@@ -22,10 +22,14 @@ except ModuleNotFoundError as err:
 
 try:
     from PyQt5.QtWidgets import (
-        QApplication, QMainWindow, QLabel, QWidget, QVBoxLayout)
+        QApplication, QMainWindow, QLabel,
+        QWidget, QVBoxLayout, QShortcut)
     from PyQt5.QtGui import (
-        QPainter, QImage, QPixmap, QPalette, QBrush, QFont)
-    from PyQt5.QtCore import Qt, QRect, QBasicTimer, QSize, QPoint
+        QPainter, QImage, QPixmap, QPalette,
+        QBrush, QFont, QKeySequence)
+    from PyQt5.QtCore import (
+        Qt, QRect, QBasicTimer, QSize, QPoint)
+    from PyQt5.QtMultimedia import QSound
 except ModuleNotFoundError as err:
     sys.stdout.write(str(err))
     sys.exit(REQUIREMENTS_ERROR)
@@ -108,11 +112,13 @@ class MainMenuWindow(QMainWindow):
             elif self.state == MainMenuState.Help:
                 self.state = MainMenuState.StartGame
 
-        elif Qt.Key_Space in self.pressed_keys:
+        elif Qt.Key_Return in self.pressed_keys \
+                or Qt.Key_Enter in self.pressed_keys:
             if self.state == MainMenuState.StartGame:
                 self.timer.stop()
                 window = MainWindow(self._size, self)
                 window.show()
+                window.sounds["start"].play()
                 self.hide()
             elif self.state == MainMenuState.Help:
                 self.timer.stop()
@@ -183,7 +189,8 @@ class GameOverWindow(QMainWindow):
                 self.state = GameOverState.NewGame
             elif self.state == GameOverState.NewGame:
                 self.state = GameOverState.MainMenu
-        elif Qt.Key_Space in self.pressed_keys:
+        elif Qt.Key_Return in self.pressed_keys \
+                or Qt.Key_Enter in self.pressed_keys:
             if self.state == GameOverState.NewGame:
                 self.timer.stop()
                 window = MainWindow(self._size, self)
@@ -239,7 +246,8 @@ class HelpWindow(QMainWindow):
         self.setPalette(palette)
 
     def update_cursor(self):
-        if Qt.Key_Space in self.pressed_keys:
+        if Qt.Key_Return in self.pressed_keys \
+                or Qt.Key_Enter in self.pressed_keys:
             self.timer.stop()
             window = MainMenuWindow(self._size, parent=self)
             window.show()
@@ -304,14 +312,90 @@ class NextLevelWindow(QMainWindow):
         elif Qt.Key_Up in self.pressed_keys:
             if self.state == NextLevelState.MainMenu:
                 self.state = NextLevelState.NextLevel
-        elif Qt.Key_Space in self.pressed_keys:
+        elif Qt.Key_Return in self.pressed_keys \
+                or Qt.Key_Enter in self.pressed_keys:
             if self.state == NextLevelState.NextLevel:
                 self.timer.stop()
-                window = MainWindow(self._size, self._parent)
-                window.show()
+                self._parent.show()
                 self.hide()
             elif self.state == NextLevelState.MainMenu:
                 pass
+
+
+class GameWinWindows(QMainWindow):
+    def __init__(self, size, parent):
+        self._parent = parent
+        self._size = size
+        super().__init__(parent)
+        self.init_ui(size)
+
+        self.state = GameOverState.MainMenu
+        self.pressed_keys = set()
+        self.timer = QBasicTimer()
+        self.timer.start(2000, self)
+
+    def init_ui(self, size):
+        self.setGeometry(self._parent.geometry())
+        self.setWindowTitle("Battle City")
+        self.set_image(QImage(
+            r"application/images/you_win_1.jpeg"))
+
+    def timerEvent(self, e):
+        self.update_cursor()
+        self.update()
+
+    def paintEvent(self, e):
+        if self.state == GameOverState.MainMenu:
+            self.set_image(QImage(
+                r"application/images/you_win_1.jpeg"))
+        elif self.state == GameOverState.NewGame:
+            self.set_image(QImage(
+                r"application/images/you_win_2.jpeg"))
+        elif self.state == GameOverState.Exit:
+            self.set_image(QImage(
+                r"application/images/you_win_3.jpeg"))
+
+    def keyPressEvent(self, event):
+        self.pressed_keys.add(event.key())
+        self.update_cursor()
+
+    def keyReleaseEvent(self, event):
+        key = event.key()
+        if key in self.pressed_keys:
+            self.pressed_keys.remove(key)
+        self.update_cursor()
+
+    def set_image(self, image):
+        _image = image.scaled(QSize(self._size, self._size))
+        palette = QPalette()
+        palette.setBrush(QPalette.Window, QBrush(_image))
+        self.setPalette(palette)
+
+    def update_cursor(self):
+        if Qt.Key_Down in self.pressed_keys:
+            if self.state == GameOverState.MainMenu:
+                self.state = GameOverState.NewGame
+            elif self.state == GameOverState.NewGame:
+                self.state = GameOverState.Exit
+        elif Qt.Key_Up in self.pressed_keys:
+            if self.state == GameOverState.Exit:
+                self.state = GameOverState.NewGame
+            elif self.state == GameOverState.NewGame:
+                self.state = GameOverState.MainMenu
+        elif Qt.Key_Return in self.pressed_keys \
+                or Qt.Key_Enter in self.pressed_keys:
+            if self.state == GameOverState.NewGame:
+                self.timer.stop()
+                window = MainWindow(self._size, self)
+                window.show()
+                self.hide()
+            elif self.state == GameOverState.MainMenu:
+                self.timer.stop()
+                window = MainMenuWindow(self._size, parent=self)
+                window.show()
+                self.hide()
+            elif self.state == GameOverState.Exit:
+                self.close()
 
 
 class MainWindow(QMainWindow):
@@ -324,17 +408,44 @@ class MainWindow(QMainWindow):
 
         self.pressed_keys = set()
         self.timer = QBasicTimer()
-        self.timer.start(15, self)
+        self.timer.start(10, self)
         self.pause = False
         self.count = 0
 
         self.game = Game(size=size // self.scale)
         seeds = list(map(int, sys.argv[1:]))
         self.levels = self.init_levels(seeds)
+        self.levels_count = len(self.levels)
 
         if len(self.levels) == 0 or \
                 not self.game.start(self.levels.pop()):
             self.close()
+
+        self.sounds = {
+            "fire": QSound("application/sounds/fire.wav"),
+            "start": QSound("application/sounds/start.wav"),
+            "boom": QSound("application/sounds/boom.wav"),
+            "end": QSound("application/sounds/end.wav"),
+            "bonus": QSound("application/sounds/bonus.wav"),
+            "brick": QSound("application/sounds/brick.wav"),
+            "win": QSound("application/sounds/win.wav")
+        }
+
+        self.cheat = QShortcut(QKeySequence("Ctrl+K"), self)
+        self.cheat.activated.connect(self.activate_cheat)
+        self.imba = QShortcut(QKeySequence("Ctrl+L"), self)
+        self.imba.activated.connect(self.activate_imba)
+        self.default = QShortcut(QKeySequence("Ctrl+J"), self)
+        self.default.activated.connect(self.activate_default)
+
+    def activate_cheat(self):
+        self.game.player.cheat = 1
+
+    def activate_imba(self):
+        self.game.player.cheat = 2
+
+    def activate_default(self):
+        self.game.player.cheat = 0
 
     def init_levels(self, seeds):
         levels = list()
@@ -354,10 +465,21 @@ class MainWindow(QMainWindow):
             window = GameOverWindow(self._size, self._parent)
             window.show()
             self.hide()
+            self.sounds["end"].play()
             return False
         elif self.game.status == GameStatus.NextLevel:
-            print(self.game.score)
+            # window = NextLevelWindow(self._size, self)
+            # window.show()
+            # self.hide()
             self.game.start(self.levels.pop())
+            self.sounds["start"].play()
+        elif self.game.status == GameStatus.Win:
+            self.timer.stop()
+            window = GameWinWindows(self._size, self._parent)
+            window.show()
+            self.hide()
+            self.sounds["win"].play()
+            return False
         return True
 
     def timerEvent(self, event):
@@ -366,13 +488,14 @@ class MainWindow(QMainWindow):
             self.pressed_keys.remove(Qt.Key_P)
 
         if self.pause:
+            self.update()
             return
 
         if not self.check_status():
             return
 
         self.count += 1
-        if self.count != 0 and self.count % 11 == 0:
+        if self.count != 0 and self.count % 15 == 0:
             self.count = 0
             self.update_bullets()
             if not self.check_status():
@@ -380,15 +503,19 @@ class MainWindow(QMainWindow):
             self.update_player()
             self.update_enemies()
 
-        if self.count != 0 and self.count % 6 == 0:
+        if self.count != 0 and self.count % 8 == 0:
             self.update_bullets()
 
         self.shoot_player()
         self.update()
 
     def init_ui(self, size):
-        self.setGeometry(self._parent.geometry())
-        self.setStyleSheet("background-color: black")
+        self.setFixedSize(size + 200, size + 100)
+        image = QImage(r"application/images/background.jpg")
+        _image = image.scaled(QSize(size + 200, size + 100))
+        palette = QPalette()
+        palette.setBrush(QPalette.Window, QBrush(_image))
+        self.setPalette(palette)
         self.setWindowTitle("Battle City")
 
     def paintEvent(self, e):
@@ -398,7 +525,49 @@ class MainWindow(QMainWindow):
         self.draw_bullets(painter)
         self.draw_enemy(painter)
         self.draw_locality(painter)
+        if self.pause:
+            self.draw_pause(painter)
+        self.draw_level_info(painter)
         painter.end()
+
+    def draw_pause(self, painter):
+        painter.setPen(Qt.darkRed)
+        painter.setFont(QFont('Decorative', 20))
+        painter.drawText(50, 40, "PAUSE")
+
+    def draw_level_info(self, painter):
+        painter.setPen(Qt.darkRed)
+        painter.setFont(QFont('Decorative', 14))
+        painter.drawText(720, 690, f"SCORES: {self.game.score}")
+
+        painter.drawText(
+            720, 540,
+            f"LEVEL: {self.game.level_num}/{self.levels_count}")
+
+        painter.drawText(720, 600, f"HEALTH:")
+        for i in range(self.game.player.health):
+            image = r"application/images/heart.png"
+            painter.drawImage(QRect(
+                720 + i * 40, 620, 30, 30),
+                QImage(image))
+
+        painter.drawText(720, 70, f"SPAWNS:")
+        for i in range(self.game.spawn_count_haunting):
+            image = r"application/images/enemy1_up_spawn.png"
+            painter.drawImage(QRect(
+                720, 90 + i * 60, self.scale, self.scale),
+                QImage(image))
+
+        for i in range(self.game.spawn_count_patrolling):
+            image = r"application/images/enemy_up_spawn.png"
+            painter.drawImage(QRect(
+                780, 90 + i * 60, self.scale, self.scale),
+                QImage(image))
+
+        painter.setFont(QFont('Decorative', 10))
+        painter.drawText(50, 730, "Default: Ctrl+J")
+        painter.drawText(200, 730, "Double-gun: Ctrl+K")
+        painter.drawText(400, 730, "Quad-gun: Ctrl+L")
 
     def draw_locality(self, painter):
         painter.setPen(Qt.green)
@@ -411,15 +580,21 @@ class MainWindow(QMainWindow):
                     Wall: "application/images/brick_wall.png",
                     Grass: "application/images/terrain.png",
                     Flag: "application/images/flag.png",
-                    Boom: "application/images/boom.png"
+                    Boom: "application/images/boom_1.png"
                 }
 
                 if type(obj) is Wall and obj.wall_type == WallType.Concrete:
                     image[Wall] = "application/images/concrete_wall.png"
 
+                if type(obj) is Boom and obj.type == BoomType.Big:
+                    image[Boom] = "application/images/boom_2.png"
+
+                if type(obj) is Boom and obj.type == BoomType.Wall:
+                    image[Boom] = "application/images/boom_wall.png"
+
                 painter.drawImage(QRect(
-                    obj.location.x * self.scale,
-                    obj.location.y * self.scale,
+                    obj.location.x * self.scale + 50,
+                    obj.location.y * self.scale + 50,
                     self.scale, self.scale),
                     QImage(image[type(obj)]))
 
@@ -429,23 +604,34 @@ class MainWindow(QMainWindow):
         painter.setPen(Qt.red)
 
         dx = -self.game.player.velocity.x
-        dx += self.count * self.game.player.velocity.x / 10
+        dx += self.count * self.game.player.velocity.x / 14
 
         dy = -self.game.player.velocity.y
-        dy += self.count * self.game.player.velocity.y / 10
+        dy += self.count * self.game.player.velocity.y / 14
 
         images = {
-            Direction.Up: r"application/images/tank_up.png",
-            Direction.Down: r"application/images/tank_down.png",
-            Direction.Left: r"application/images/tank_left.png",
-            Direction.Right: r"application/images/tank_right.png"
+            Direction.Up: [r"application/images/tank_up.png",
+                           r"application/images/cheat_tank_up.png",
+                           r"application/images/imba_tank_up.png"],
+
+            Direction.Down: [r"application/images/tank_down.png",
+                             r"application/images/cheat_tank_down.png",
+                             r"application/images/imba_tank_down.png"],
+
+            Direction.Left: [r"application/images/tank_left.png",
+                             r"application/images/cheat_tank_left.png",
+                             r"application/images/imba_tank_left.png"],
+
+            Direction.Right: [r"application/images/tank_right.png",
+                              r"application/images/cheat_tank_right.png",
+                              r"application/images/imba_tank_right.png"],
         }
 
         painter.drawImage(QRect(
-            int((self.game.player.location.x + dx) * self.scale),
-            int((self.game.player.location.y + dy) * self.scale),
+            int((self.game.player.location.x + dx) * self.scale) + 50,
+            int((self.game.player.location.y + dy) * self.scale) + 50,
             self.scale, self.scale),
-            QImage(images[self.game.player.direction]))
+            QImage(images[self.game.player.direction][self.game.player.cheat]))
 
     def draw_enemy(self, painter):
         painter.setPen(Qt.red)
@@ -465,25 +651,28 @@ class MainWindow(QMainWindow):
         }
 
         for enemy in self.game.map.get_enemies():
-            dx = -enemy.velocity.x + self.count * enemy.velocity.x / 10
-            dy = -enemy.velocity.y + self.count * enemy.velocity.y / 10
+
+            dx = -enemy.velocity.x + self.count * enemy.velocity.x / 14
+            dy = -enemy.velocity.y + self.count * enemy.velocity.y / 14
 
             if enemy.type == EnemyType.Haunting:
                 image = uimages[enemy.direction]
-            else:
+            elif enemy.type == EnemyType.Patrolling:
                 image = images[enemy.direction]
+            else:
+                image = r"application/images/spawn_1.png"
 
             painter.drawImage(QRect(
-                int((enemy.location.x + dx) * self.scale),
-                int((enemy.location.y + dy) * self.scale),
+                int((enemy.location.x + dx) * self.scale) + 50,
+                int((enemy.location.y + dy) * self.scale) + 50,
                 self.scale, self.scale),
                 QImage(image))
 
     def _draw_bullet(self, painter, image, bullet):
         dx_velocity = -bullet.velocity.x + \
-                      (self.count % 6) * bullet.velocity.x / 5
+                      (self.count % 8) * bullet.velocity.x / 7
         dy_velocity = -bullet.velocity.y + \
-                      (self.count % 6) * bullet.velocity.y / 5
+                      (self.count % 8) * bullet.velocity.y / 7
 
         dx = 0
         dy = 0
@@ -502,8 +691,8 @@ class MainWindow(QMainWindow):
             dy += self.scale / 2 - bullet_size / 2
 
         painter.drawImage(QRect(
-            int((bullet.location.x + dx_velocity) * self.scale) + int(dx),
-            int((bullet.location.y + dy_velocity) * self.scale) + int(dy),
+            int((bullet.location.x + dx_velocity) * self.scale) + int(dx) + 50,
+            int((bullet.location.y + dy_velocity) * self.scale) + int(dy) + 50,
             bullet_size, bullet_size), QImage(image))
 
     def draw_bullets(self, painter):
@@ -546,7 +735,14 @@ class MainWindow(QMainWindow):
         for location in self.game.map:
             for obj in self.game.map[location].copy():
                 if type(obj) == Boom:
-                    self.game.map[obj.location].remove(obj)
+                    if obj.type == BoomType.Big:
+                        self.game.map[obj.location].remove(obj)
+                        self.sounds["boom"].play()
+                    elif obj.type == BoomType.Wall:
+                        self.game.map[obj.location].remove(obj)
+                        self.sounds["brick"].play()
+                    else:
+                        obj.type = BoomType.Big
         self.game.move_bullets()
 
     def update_enemies(self):
@@ -558,6 +754,7 @@ class MainWindow(QMainWindow):
                 self.game.status = GameStatus.NextLevel
             return
         self.game.move_enemies()
+        self.game.spawn_enemy()
 
     def update_player(self):
         if Qt.Key_Up in self.pressed_keys:
@@ -576,7 +773,10 @@ class MainWindow(QMainWindow):
 
     def shoot_player(self):
         if Qt.Key_Space in self.pressed_keys:
-            self.game.shoot()
+            self.shoot = False
+            shoot = self.game.shoot()
+            if shoot:
+                self.sounds["fire"].play()
 
 
 def main():

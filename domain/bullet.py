@@ -9,8 +9,8 @@ class BulletType(Enum):
 
 
 class Bullet(IMoveObject):
-    def __init__(self, location, direction, speed, parent, bullet_type):
-        super().__init__(location, direction, speed)
+    def __init__(self, location, direction, parent, bullet_type):
+        super().__init__(location, direction)
         self.bullet_type = bullet_type
         self.parent = parent
 

@@ -3,11 +3,11 @@ import abc
 
 
 class IMoveObject(abc.ABC):
-    def __init__(self, location, direction, speed):
+    def __init__(self, location, direction):
         self.location = location
         self.direction = direction
-        self.speed = speed
         self.velocity = Point(0, 0)
+        self.speed = 1
 
     def move(self, direction):
         if self.direction != direction:
@@ -19,6 +19,16 @@ class IMoveObject(abc.ABC):
 
     def rotate(self, direction: Direction):
         self.direction = direction
+
+    def opposite_direction(self):
+        if self.direction == Direction.Up:
+            return Direction.Down
+        elif self.direction == Direction.Down:
+            return Direction.Up
+        elif self.direction == Direction.Left:
+            return Direction.Right
+        elif self.direction == Direction.Right:
+            return Direction.Left
 
     def get_new_location(self, direction):
         dx_moves = {

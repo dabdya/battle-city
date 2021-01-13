@@ -1,5 +1,5 @@
 from domain.infrastructure.geometry import Point, Direction
-from application.level_generator import CellState
+from application.level import CellState
 from domain.enemy import Enemy, EnemyType
 from application.ai import EnemyAI
 from domain.obstacle import Wall, WallType
@@ -9,6 +9,7 @@ from domain.bullet import Bullet
 from domain.map import Map
 from domain.flag import Flag
 from domain.boom import Boom, BoomType
+from domain.bonus import Bonus, BonusType
 
 from enum import Enum
 import random
@@ -29,6 +30,7 @@ class Game:
         self.player = None
         self.status = None
         self.score = 0
+        self.bonus_count = 0
         self.ai = EnemyAI(self)
         self.level_num = 1
         self.spawn_count_haunting = 0
@@ -79,113 +81,144 @@ class Game:
 
     def move_player(self, direction):
         new_location = self.player.get_new_location(direction)
-        if self.map.check_coords(new_location):
-            for obj in self.map[new_location]:
-                if type(obj) in [Wall, Flag, Enemy]:
-                    self.player.rotate(direction)
-                    self.player.velocity = Point(0, 0)
-                    return
-            bullet = self.get_obj_by_location_and_type(new_location, Bullet)
-            if bullet:
-                if isinstance(bullet.parent, Enemy):
-                    bullet.parent.bullets.remove(bullet)
-                    self.map[bullet.location].remove(bullet)
-                    if self.player.health > 1:
-                        self.player.health -= 1
-                        self.player.velocity = Point(0, 0)
-                        return
-                    self.map[self.player.location].clear()
-                    self.map[new_location].add(Boom(new_location))
-                    self.status = GameStatus.End
-                elif isinstance(bullet.parent, Player):
-                    self.map.swap(self.player, new_location)
-                    self.player.move(direction)
-            else:
-                self.map.swap(self.player, new_location)
-                self.player.move(direction)
-        else:
+        if (not self.map.check_coords(new_location)
+                or self.player.direction != direction):
             self.player.rotate(direction)
             self.player.velocity = Point(0, 0)
+            return
 
-    def move_bullets(self):
+        for obj in self.map[new_location]:
+            if type(obj) in [Wall, Flag, Enemy]:
+                self.player.rotate(direction)
+                self.player.velocity = Point(0, 0)
+                return
+
+        bullet = self.map.get_obj_by_type(new_location, Bullet)
+        bonus = self.map.get_obj_by_type(new_location, Bonus)
+        if bullet:
+            if isinstance(bullet.parent, Enemy):
+                bullet.parent.bullets.remove(bullet)
+                self.map[bullet.location].remove(bullet)
+                if self.player.health > 1:
+                    self.player.health -= 1
+                    self.player.velocity = Point(0, 0)
+                    return
+                self.map[new_location].add(Boom(new_location))
+                self.spawn_player()
+
+            elif isinstance(bullet.parent, Player):
+                self.map.swap(self.player, new_location)
+                self.player.move(direction)
+        elif bonus:
+            self.player.apply_bonus(bonus)
+            self.map[new_location].remove(bonus)
+            self.map.swap(self.player, new_location)
+            self.player.move(direction)
+        else:
+            self.map.swap(self.player, new_location)
+            self.player.move(direction)
+
+    def spawn_player(self):
+
+        available_locations = [
+            Point(*reversed(x))
+            for x in self.level.get_player_base()
+            if len(self.map[Point(*reversed(x))]) == 0
+        ]
+
+        if not available_locations:
+            return
+
+        location = random.choice(available_locations)
+        self.map.swap(self.player, location)
+        self.player.recover(location)
+
+    def move_player_bullets(self):
         for bullet in self.player.bullets.copy():
             self._move_bullet(bullet, self.player)
 
+    def move_enemy_bullets(self):
         for enemy in self.map.get_enemies():
             for bullet in enemy.bullets.copy():
                 self._move_bullet(bullet, enemy)
 
     def _move_bullet(self, bullet, parent):
-        new_location = bullet.get_new_location(bullet.direction)
-        if self.map.check_coords(new_location):
+        location = bullet.get_new_location(bullet.direction)
 
-            cell_types = {type(x) for x in self.map[new_location]}
-
-            if bullet.can_move(self.map[new_location]):
-                self.map.swap(bullet, new_location)
-                bullet.move(bullet.direction)
-
-            elif Wall in cell_types:
-                wall = self.get_obj_by_location_and_type(new_location, Wall)
-                if not wall.destruct(bullet.bullet_type):
-                    parent.bullets.remove(bullet)
-                    self.map[bullet.location].remove(bullet)
-                    return
-                parent.bullets.remove(bullet)
-                self.map[new_location].remove(wall)
+        if not self.map.check_coords(location):
+            if bullet in self.map[bullet.location]:
                 self.map[bullet.location].remove(bullet)
-                self.map[new_location].add(
-                    Boom(new_location, _type=BoomType.Wall))
-
-            elif Enemy in cell_types:
-                if isinstance(parent, Enemy):
-                    parent.bullets.remove(bullet)
-                    self.map[bullet.location].remove(bullet)
-                    return
-                enemy = self.get_obj_by_location_and_type(new_location, Enemy)
+            if bullet in parent.bullets:
                 parent.bullets.remove(bullet)
+            return
 
-                unused_bullet = self.get_obj_by_location_and_type(new_location, Bullet)
-                if unused_bullet:
-                    self.map[new_location].remove(unused_bullet)
+        if bullet.can_move(self.map[location]):
+            self.map.swap(bullet, location)
+            bullet.move(bullet.direction)
+            return
 
-                self.map[bullet.location].remove(bullet)
-                if enemy.health > 1:
-                    enemy.health -= 1
-                    return
-                if isinstance(parent, Player):
-                    self.score += 1
-                self.map[new_location].remove(enemy)
-                self.map[new_location].add(Boom(new_location))
-
-            elif Player in cell_types:
-                parent.bullets.remove(bullet)
-                self.map[bullet.location].remove(bullet)
-                if self.player.health > 1:
-                    self.player.health -= 1
-                    return
-                self.map[new_location].remove(self.player)
-                self.map[new_location].add(Boom(new_location))
-                self.status = GameStatus.End
-
-            elif Flag in cell_types:
-                parent.bullets.remove(bullet)
-                if isinstance(parent, Player):
-                    return
-                self.map[new_location].clear()
-                self.map[bullet.location].remove(bullet)
-                self.status = GameStatus.End
-
-            elif Bullet in cell_types:
-                parent.bullets.remove(bullet)
-                vs = self.get_obj_by_location_and_type(new_location, Bullet)
-                if vs in vs.parent.bullets:
-                    vs.parent.bullets.remove(vs)
-                self.map[new_location].remove(vs)
-                self.map[bullet.location].remove(bullet)
-        else:
-            parent.bullets.remove(bullet)
+        if bullet in self.map[bullet.location]:
             self.map[bullet.location].remove(bullet)
+        if bullet in parent.bullets:
+            parent.bullets.remove(bullet)
+
+        for obj in self.map[location].copy():
+
+            if isinstance(obj, Wall):
+                if obj.destruct(bullet.bullet_type):
+                    self._bullet_with_wall(obj, location)
+
+            if isinstance(obj, Enemy):
+                if not isinstance(parent, Enemy):
+                    self._bullet_with_enemy(obj, location)
+
+            if isinstance(obj, Player):
+                if not isinstance(parent, Player):
+                    self._bullet_with_player(self.player, location)
+
+            if isinstance(obj, Flag):
+                if not isinstance(parent, Player):
+                    self._bullet_with_flag(obj, location)
+
+            if isinstance(obj, Bullet) and obj != bullet:
+                self._bullet_with_bullet(obj, location)
+
+    def _bullet_with_wall(self, wall, location):
+        boom = Boom(location, _type=BoomType.Wall)
+        self.map[location].remove(wall)
+        self.map[location].add(boom)
+
+    def _bullet_with_enemy(self, enemy, location):
+        if enemy.health > 1:
+            enemy.health -= 1
+        else:
+            self.score += 1
+            boom = Boom(location)
+            if enemy in self.map[location]:
+                self.map[location].remove(enemy)
+            self.map[location].add(boom)
+
+    def _bullet_with_player(self, player, location):
+        if not player.invulnerability:
+            if not player.armor:
+                player.health -= 1
+                if player.health == 0:
+                    self.map[location].add(Boom(location))
+                    self.spawn_player()
+            else:
+                player.armor = False
+
+    def _bullet_with_flag(self, flag, location):
+        boom = Boom(location, _type=BoomType.Wall)
+        self.status = GameStatus.End
+        self.map[location].remove(flag)
+        self.map[location].add(boom)
+
+    def _bullet_with_bullet(self, bullet, location):
+        if bullet in bullet.parent.bullets:
+            bullet.parent.bullets.remove(bullet)
+        if bullet in self.map[location]:
+            self.map[location].remove(bullet)
 
     def move_enemies(self):
         enemies = self.map.get_enemies()
@@ -195,22 +228,20 @@ class Game:
                 enemy.velocity = Point(0, 0)
                 continue
             new_location = enemy.get_new_location(direction)
-            bullet = self.get_obj_by_location_and_type(new_location, Bullet)
+            bullet = self.map.get_obj_by_type(new_location, Bullet)
             if bullet:
                 if isinstance(bullet.parent, Enemy):
                     bullet.parent.bullets.remove(bullet)
                     self.map[bullet.location].remove(bullet)
                     enemy.directions.insert(0, direction)
                 elif isinstance(bullet.parent, Player):
-                    # if bullet in bullet.parent.bullets:
-                    bullet.parent.bullets.remove(bullet)
+                    if bullet in bullet.parent.bullets:
+                        bullet.parent.bullets.remove(bullet)
                     self.map[bullet.location].remove(bullet)
                     if enemy.health > 1:
                         enemy.health -= 1
-                        enemy.velocity = Point(0, 0)
                         return
-                    if isinstance(bullet.parent, Player):
-                        self.score += 1
+                    self.score += 1
                     self.map[enemy.location].remove(enemy)
                     self.map[new_location].add(Boom(new_location))
             else:
@@ -276,8 +307,14 @@ class Game:
                 self.map[b4.location].add(b4)
                 return True
 
-    def get_obj_by_location_and_type(self, location, _type):
-        for obj in self.map[location]:
-            if type(obj) == _type:
-                return obj
+    def add_bonus(self):
+        available_cells = [
+            location
+            for location in self.map
+            if len(self.map[location]) == 0
+        ]
 
+        location = random.choice(available_cells)
+        _type = random.choice(list(BonusType))
+        bonus = Bonus(location, _type)
+        self.map[location].add(bonus)

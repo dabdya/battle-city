@@ -1,9 +1,11 @@
+from random import randint
+
 from domain.infrastructure.geometry import Direction, Point
+
+from domain.enemy import Enemy, EnemyType
 from domain.player import Player
 from domain.obstacle import Wall
-from domain.enemy import Enemy, EnemyType
 from domain.flag import Flag
-from random import randint
 
 
 class EnemyAI:
@@ -73,7 +75,6 @@ class EnemyAI:
             bullet = enemy.shoot()
             if bullet:
                 self.game.map[bullet.location].add(bullet)
-                # enemy.velocity = Point(0, 0)
             return True
 
     def _next_direction(self, enemy):
@@ -91,9 +92,9 @@ class EnemyAI:
     def _flag_enemy(self, enemy):
         pass
 
-    def _haunting_enemy(self, enemy):
-        dx = enemy.location.x - self.game.player.location.x
-        dy = enemy.location.y - self.game.player.location.y
+    def _haunting_enemy(self, target, enemy):
+        dx = enemy.location.x - target.location.x
+        dy = enemy.location.y - target.location.y
 
         was_shoot = False
         if dx == 0:
@@ -133,7 +134,6 @@ class EnemyAI:
                 bullet = enemy.shoot()
                 if bullet:
                     self.game.map[bullet.location].add(bullet)
-                    # enemy.velocity = Point(0, 0)
                 return
 
         new_location = enemy.get_new_location(enemy.direction)
@@ -153,5 +153,9 @@ class EnemyAI:
         if enemy.type == EnemyType.Patrolling:
             direction = self._patrolling_enemy(enemy)
         elif enemy.type == EnemyType.Haunting:
-            direction = self._haunting_enemy(enemy)
+            if self.game.player.health:
+                target = self.game.player
+            else:
+                target = self.game.map.get_flag()
+            direction = self._haunting_enemy(target, enemy)
         return direction

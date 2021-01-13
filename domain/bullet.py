@@ -1,5 +1,6 @@
 from .infrastructure.move_obj import IMoveObject
 from domain.terrain import Grass
+from domain.bonus import Bonus
 from enum import Enum
 
 
@@ -21,4 +22,4 @@ class Bullet(IMoveObject):
             return False
         obj = cell.pop()
         cell.add(obj)
-        return type(obj) == Grass
+        return type(obj) in [Grass, Bonus]

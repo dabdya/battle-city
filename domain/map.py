@@ -1,4 +1,6 @@
 from domain.enemy import Enemy
+from domain.bonus import Bonus
+from domain.flag import Flag
 from .infrastructure.geometry import Point
 
 
@@ -25,12 +27,31 @@ class Map:
                     enemies.append(obj)
         return enemies
 
+    def get_flag(self):
+        for location in self._map.values():
+            for obj in location:
+                if isinstance(obj, Flag):
+                    return obj
+
+    def get_bonuses(self):
+        bonuses = list()
+        for location in self._map.values():
+            for obj in location:
+                if isinstance(obj, Bonus):
+                    bonuses.append(obj)
+        return bonuses
+
     def cell_types(self, location):
         _types = {
             type(x)
             for x in self._map[location]
         }
         return _types
+
+    def get_obj_by_type(self, location, _type):
+        for obj in self._map[location]:
+            if type(obj) == _type:
+                return obj
 
     def swap(self, obj, location):
         if obj in self._map[obj.location]:
